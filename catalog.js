@@ -5,7 +5,7 @@ window.TinyLibrary = (() => {
   const definitions=[
     ['puppy','Puppy','🐶','Animals',3],['kitty','Kitty','🐱','Animals',4],['duck','Duck','🦆','Animals',4],['car','Car','🚗','Things',3],
     ['cow','Cow','🐮','Animals',2],['horse','Horse','🐴','Animals',2],['sheep','Sheep','🐑','Animals',2],['pig','Pig','🐷','Animals',2],['rooster','Rooster','🐓','Animals',2],
-    ['elephant','Elephant','🐘','Animals',2],['frog','Frog','🐸','Animals',2],['owl','Owl','🦉','Animals',2],['monkey','Monkey','🐒','Animals',3],['bee','Bee','🐝','Animals',2],['bird','Bird','🐦','Animals',2],
+    ['elephant','Elephant','🐘','Animals',2],['frog','Frog','🐸','Animals',2],['owl','Owl','🦉','Animals',2],['monkey','Monkey','🐒','Animals',4],['bee','Bee','🐝','Animals',2],['bird','Bird','🐦','Animals',2],
     ['bell','Bell','🔔','Things',2],['train','Train','🚂','Things',2],['racecar','Race car','🏎️','Things',2],['drum','Drum','🥁','Music',2],['guitar','Guitar','🎸','Music',2],['piano','Piano','🎹','Music',2],
     ['rain','Rain','🌧️','Nature',2],['water','Water','💧','Nature',2],['thunder','Thunder','⛈️','Nature',2],['applause','Applause','👏','Things',2]
   ].map(([key,name,emoji,category,version],index)=>Object.freeze({key,name,emoji,category,version,color:palette[index%palette.length],id:`b7b00000-0000-4000-8000-${index.toString(16).padStart(12,'0')}`}));
