@@ -6,6 +6,7 @@ const MAX_BUTTONS = 12;
 const DB_NAME = 'tiny-sounds';
 let db, boardRevision = 0, board = [], urls = [], initialized = false, storageOK = false;
 let audioContext, output, currentSource, playSequence = 0;
+let syncMeta = {owner:null,remoteRevision:0,dirty:false};
 const buffers = new Map();
 let flashTimer, noticeTimer, editorSession = 0, draft = null, photoURL = null;
 let recorder = null, stream = null, recordTimer, recordStarted = 0, recordingPending = false, photoPending = false;
@@ -35,27 +36,77 @@ function readBoard() {
   return new Promise((resolve, reject) => {
     const tx = db.transaction('state', 'readonly');
     const store = tx.objectStore('state');
-    const request = store.get('board'), revision = store.get('revision');
-    tx.oncomplete = () => { boardRevision = revision.result || 0; resolve(request.result); };
+    const request = store.get('board'), revision = store.get('revision'), meta = store.get('sync-meta');
+    tx.oncomplete = () => { boardRevision = revision.result || 0; syncMeta=meta.result || syncMeta; resolve(request.result); };
     tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error);
   });
 }
-function writeBoard(next) {
-  return new Promise((resolve, reject) => {
-    if (!db || !storageOK) return reject(new Error('Device storage is unavailable. Enable site storage, then reopen the app.'));
-    const tx = db.transaction('state', 'readwrite');
-    const store = tx.objectStore('state');
-    let conflict = false;
-    const revision = store.get('revision');
-    revision.onsuccess = () => {
-      if ((revision.result || 0) !== boardRevision) { conflict = true; tx.abort(); return; }
-      store.put(next, 'board'); store.put(boardRevision + 1, 'revision');
+function writeBoard(next, options={}) {
+  const expected=options.expectedRevision ?? boardRevision;
+  return new Promise((resolve,reject)=>{
+    if(!db||!storageOK)return reject(new Error('Device storage is unavailable. Enable site storage, then reopen the app.'));
+    const tx=db.transaction('state','readwrite'),store=tx.objectStore('state');
+    let conflict=false,nextMeta;
+    const meta=store.get('sync-meta'),revision=store.get('revision');
+    revision.onsuccess=()=>{
+      if((revision.result||0)!==expected){conflict=true;tx.abort();return;}
+      const latest=meta.result || syncMeta;
+      nextMeta=options.meta || (options.system?latest:{...latest,dirty:true});
+      store.put(next,'board');store.put(expected+1,'revision');store.put(nextMeta,'sync-meta');
+      if(options.backup)store.put(options.backup,'board-backup');
     };
-    tx.oncomplete = () => { boardRevision++; resolve(); };
-    tx.onerror = () => reject(tx.error);
-    tx.onabort = () => reject(conflict ? new Error('Another window saved changes. Reopen this app before editing again so those changes are preserved.') : tx.error);
+    tx.oncomplete=()=>{boardRevision=expected+1;syncMeta=nextMeta;resolve();if(!options.system&&!options.meta)setTimeout(()=>window.TinySoundsSync?.localChanged(),0);};
+    tx.onerror=()=>reject(tx.error);
+    tx.onabort=()=>reject(conflict?Object.assign(new Error('Another window saved changes. Reopen this app before editing again so those changes are preserved.'),{code:'LOCAL_CHANGED'}):tx.error);
   });
 }
+function storedValue(key, value) {
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction('state',value===undefined?'readonly':'readwrite'),store=tx.objectStore('state');
+    const req=value===undefined?store.get(key):store.put(value,key);
+    tx.oncomplete=()=>resolve(req.result);tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);
+  });
+}
+const syncAdapter = {
+  snapshot:()=>({items:board,revision:boardRevision,meta:{...syncMeta}}),
+  busy:()=>saving||busyBoard||$('#editor').open||$('#delete-dialog').open,
+  backup:items=>storedValue('board-backup',items),
+  hasBackup:async()=>Boolean(await storedValue('board-backup')),
+  async replace(items,meta,expected,backup){
+    if(this.busy())throw Object.assign(new Error('Finish editing before downloading account changes.'),{code:'LOCAL_BUSY'});
+    await writeBoard(items,{meta,expectedRevision:expected,backup});
+    board=items;buffers.clear();stopSound();render();Promise.allSettled(board.map(decodeSound));
+  },
+  async checkCurrent(expected){
+    return new Promise((resolve,reject)=>{
+      const tx=db.transaction('state','readonly'),store=tx.objectStore('state');
+      const revision=store.get('revision'),meta=store.get('sync-meta');
+      tx.oncomplete=()=>{
+        if((revision.result||0)!==boardRevision)return reject(Object.assign(new Error('Another window changed this board. Reopen this window before syncing again.'),{code:'LOCAL_STALE'}));
+        if(expected!==undefined && expected!==(revision.result||0))return reject(Object.assign(new Error('Newer edits are waiting to sync.'),{code:'LOCAL_CHANGED'}));
+        syncMeta=meta.result || syncMeta;resolve();
+      };
+      tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);
+    });
+  },
+  async markUploaded(uploadedRevision,owner,remoteRevision){
+    await new Promise((resolve,reject)=>{
+      const tx=db.transaction('state','readwrite'),store=tx.objectStore('state');let next,stale;
+      const revision=store.get('revision');
+      revision.onsuccess=()=>{
+        stale=(revision.result||0)!==boardRevision;
+        next={owner,remoteRevision,dirty:(revision.result||0)!==uploadedRevision};
+        store.put(next,'sync-meta');
+      };
+      tx.oncomplete=()=>{if(stale)reject(Object.assign(new Error('Another window changed this board. Reopen this window before syncing again.'),{code:'LOCAL_STALE'}));else{syncMeta=next;resolve();}};tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);
+    });
+  },
+  async restore(){
+    if(this.busy())throw new Error('Finish editing before restoring a previous board.');
+    const previous=await storedValue('board-backup');if(!previous)return;
+    await writeBoard(previous,{backup:board});board=previous;buffers.clear();stopSound();render();Promise.allSettled(board.map(decodeSound));
+  }
+};
 function storageMessage(error) {
   return error?.name === 'QuotaExceededError' ? 'This device is out of storage. Free some space and try again. Your saved board is unchanged.' : (error?.message || 'Could not save. Your saved board is unchanged. Please try again.');
 }
@@ -347,11 +398,13 @@ async function setupOffline() {
 (async()=>{
   try{
     db=await openDatabase();storageOK=true;const saved=await readBoard();
-    if(saved===undefined){board=defaultBoard();await writeBoard(board);}else {
+    if(saved===undefined){board=defaultBoard();await writeBoard(board,{system:true});}else {
       board=upgradeDemoSounds(saved);
-      if(board.some((item,index)=>item!==saved[index]))await writeBoard(board);
+      if(board.some((item,index)=>item!==saved[index]))await writeBoard(board,{system:true});
     }
   }catch(error){storageOK=false;if(!board.length)board=defaultBoard();notify('Device storage is unavailable. Demo play works, but changes cannot be saved.');}
   // Decode before showing the board, avoiding a decoding delay on the first tap.
   await Promise.allSettled(board.map(decodeSound));initialized=true;render();setupOffline();
+  if(storageOK)window.TinySoundsSync?.start(syncAdapter).catch(()=>{ $('#sync-status').textContent='Sync could not start. Your saved board still plays on this device.'; });
+  else { $('#sync-status').textContent='Enable device storage to use private sync.';$('#sync-login').inert=true; }
 })();

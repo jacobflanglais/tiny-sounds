@@ -1,6 +1,6 @@
 # Tiny Sounds
 
-A private offline soundboard for little hands, built with vanilla HTML, CSS, and JavaScript. No build step or backend.
+A private offline soundboard for little hands, built with vanilla HTML, CSS, and JavaScript. No build step. Optional private device sync uses sign-in.
 
 ## Play
 
@@ -10,11 +10,11 @@ Tap a tile to play its sound. The four starter tiles play a dog bark, cat meow, 
 
 Hold the bottom-right gear for three seconds. Choose **Add a sound**, enter a name, take or choose a photo, then record and save a sound. Recordings can be up to 15 seconds. Drag the dotted handles to reorder, or use the arrows. Tap a card to edit it. The board holds up to 12 sounds.
 
-Photos and recordings stay in IndexedDB on the device where you add them. They are never uploaded or synced. Clearing browser storage can remove them.
+Photos and recordings stay in IndexedDB on the device where you add them. When you sign in, your board syncs through private account storage. Clearing browser storage can remove them.
 
 ## Install on a phone
 
-Open the HTTPS site online. Hold the gear and wait for **Ready for offline play**. In Safari on iPhone, choose **Share → Add to Home Screen**. In Android Chrome, choose **Install app** or **Add to Home screen**. Launch from that icon and add your family content there. After the initial setup, it works offline.
+Open the HTTPS site online. Hold the gear and wait for **Ready for offline play**. In Safari on iPhone, choose **Share → Add to Home Screen**. In Android Chrome, choose **Install app** or **Add to Home screen**. Launch from that icon and sign in to the same account to download your board, or add your family content there. After the initial setup, it works offline.
 
 ## Run locally
 
@@ -33,3 +33,7 @@ GitHub Pages: publish the `main` branch from `/(root)`. All assets and installat
 ## Sound credits
 
 See [SOUND-CREDITS.md](SOUND-CREDITS.md) for the bundled recordings, modifications, creators, and audio licenses.
+
+## Device sync
+
+Hold the gear and sign in in the sync section. Use the same account on each device. Offline edits sync on reconnection. If two boards conflict, choose one and keep the alternate as a local backup. See [SYNC.md](SYNC.md) for access controls, data models, and recovery behavior.
