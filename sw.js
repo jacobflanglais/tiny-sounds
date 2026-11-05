@@ -1,7 +1,7 @@
 'use strict';
 // Scope-specific caches allow multiple GitHub Pages projects on one origin.
 const PREFIX = `tiny-sounds-${new URL(self.registration.scope).pathname}-`;
-const CACHE = `${PREFIX}v7`;
+const CACHE = `${PREFIX}v8`;
 const ASSETS = ['./', './index.html', './styles.css', './app.js', './catalog.js', './sync.js', './sync-config.js', './vendor/supabase.js', './vendor/LICENSE-supabase', './demo-sounds.js', './SOUND-CREDITS.md', './manifest.webmanifest',
   './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png', './icons/apple-touch-icon.png'];
 self.addEventListener('install', event => {
