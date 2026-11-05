@@ -212,8 +212,9 @@ function render(){
   grid.style.setProperty('--rows',Math.max(1,Math.ceil(active.length/2)));
   active.forEach((item,index)=>{
     const url=photoFor(item),tile=document.createElement('button');tile.type='button';tile.className='sound-tile'+(url?' has-photo':'');
-    tile.style.setProperty('--tile-color',item.color);tile.setAttribute('aria-label',`Play ${item.name}`);tile.append(visual(item,url));
-    const name=document.createElement('span');name.className='tile-name';name.textContent=item.name;tile.append(name);
+    tile.style.setProperty('--tile-color',item.color);tile.setAttribute('aria-label',`Play ${item.name}`);
+    const content=document.createElement('span');content.className='tile-content';content.append(visual(item,url));
+    const name=document.createElement('span');name.className='tile-name';name.textContent=item.name;content.append(name);tile.append(content);
     tile.addEventListener('pointerdown',event=>{if(event.button!==0||event.isPrimary===false)return;event.preventDefault();flash(item,url);playSound(item);});
     tile.addEventListener('click',event=>{if(event.detail===0){flash(item,url);playSound(item);}});grid.append(tile);
     const card=document.createElement('article');card.className='edit-card';card.dataset.id=item.id;card.style.setProperty('--tile-color',item.color);

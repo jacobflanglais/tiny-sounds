@@ -12,7 +12,7 @@ Hold the bottom-right gear for three seconds. **Sound library** contains 25 bund
 
 **Your recordings** holds up to 25 custom sounds. Choose **Add a sound**, enter a name, take or choose a photo, then record and save up to 15 seconds of audio. New recordings can stay saved while play is full. Personalizing a default creates a custom copy and keeps the original. Remove from play to save a sound for later; delete a custom sound only when you want to remove it permanently.
 
-The collection holds 50 sounds: 25 defaults and 25 custom recordings. The play screen shows at most 12. Drag active cards' dotted handles to reorder, or use the arrows.
+The collection holds 50 sounds: 25 defaults and 25 custom recordings. The play screen shows at most 12. Icons, labels, and spacing scale to each tile. Custom photos fit without cropping. Long labels wrap to two lines, with one-line ellipsis in very short landscape tiles; accessible names remain complete. Drag active cards' dotted handles to reorder, or use the arrows.
 
 Photos and recordings persist offline in IndexedDB. Sign in to privately sync the collection and play selections across devices. Offline changes upload when connected. Clearing browser storage can remove local copies.
 
