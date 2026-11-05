@@ -3,11 +3,11 @@
 window.TinyLibrary = (() => {
   const palette=['#e1e9c9','#edd9ca','#f1e5b8','#cbdde4','#e2d6e8','#d6e5dc'];
   const definitions=[
-    ['puppy','Puppy','🐶','Animals',2],['kitty','Kitty','🐱','Animals',3],['duck','Duck','🦆','Animals',3],['car','Car','🚗','Things',2],
-    ['cow','Cow','🐮','Animals',1],['horse','Horse','🐴','Animals',1],['sheep','Sheep','🐑','Animals',1],['pig','Pig','🐷','Animals',1],['rooster','Rooster','🐓','Animals',1],
-    ['elephant','Elephant','🐘','Animals',1],['frog','Frog','🐸','Animals',1],['owl','Owl','🦉','Animals',1],['monkey','Monkey','🐒','Animals',1],['bee','Bee','🐝','Animals',1],['bird','Bird','🐦','Animals',1],
-    ['bell','Bell','🔔','Things',1],['train','Train','🚂','Things',1],['racecar','Race car','🏎️','Things',1],['drum','Drum','🥁','Music',1],['guitar','Guitar','🎸','Music',1],['piano','Piano','🎹','Music',1],
-    ['rain','Rain','🌧️','Nature',1],['water','Water','💧','Nature',1],['thunder','Thunder','⛈️','Nature',1],['applause','Applause','👏','Things',1]
+    ['puppy','Puppy','🐶','Animals',3],['kitty','Kitty','🐱','Animals',4],['duck','Duck','🦆','Animals',4],['car','Car','🚗','Things',3],
+    ['cow','Cow','🐮','Animals',2],['horse','Horse','🐴','Animals',2],['sheep','Sheep','🐑','Animals',2],['pig','Pig','🐷','Animals',2],['rooster','Rooster','🐓','Animals',2],
+    ['elephant','Elephant','🐘','Animals',2],['frog','Frog','🐸','Animals',2],['owl','Owl','🦉','Animals',2],['monkey','Monkey','🐒','Animals',2],['bee','Bee','🐝','Animals',2],['bird','Bird','🐦','Animals',2],
+    ['bell','Bell','🔔','Things',2],['train','Train','🚂','Things',2],['racecar','Race car','🏎️','Things',2],['drum','Drum','🥁','Music',2],['guitar','Guitar','🎸','Music',2],['piano','Piano','🎹','Music',2],
+    ['rain','Rain','🌧️','Nature',2],['water','Water','💧','Nature',2],['thunder','Thunder','⛈️','Nature',2],['applause','Applause','👏','Things',2]
   ].map(([key,name,emoji,category,version],index)=>Object.freeze({key,name,emoji,category,version,color:palette[index%palette.length],id:`b7b00000-0000-4000-8000-${index.toString(16).padStart(12,'0')}`}));
   const byKey=new Map(definitions.map(item=>[item.key,item]));
   const byEmoji=new Map(definitions.map(item=>[item.emoji,item.key]));

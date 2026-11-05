@@ -145,6 +145,13 @@ async function decodeSound(item) {
   if (peak>.7) for (let c=0;c<buffer.numberOfChannels;c++) {
     const channel=buffer.getChannelData(c); for (let i=0;i<channel.length;i++) channel[i]*=.7/peak;
   }
+  // Smooth every ending, including custom previews, without changing saved media.
+  // Short clips retain at least their first half at full level.
+  const fadeSamples = Math.min(Math.round(buffer.sampleRate*.5),Math.floor(buffer.length/2));
+  if(fadeSamples>1)for(let c=0;c<buffer.numberOfChannels;c++){
+    const channel=buffer.getChannelData(c),start=buffer.length-fadeSamples;
+    for(let i=0;i<fadeSamples;i++)channel[start+i]*=1-i/(fadeSamples-1);
+  }
   buffers.set(item.id,buffer); return buffer;
 }
 function stopSound() {

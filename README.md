@@ -4,7 +4,7 @@ A private offline soundboard for little hands, built with vanilla HTML, CSS, and
 
 ## Play
 
-Tap a tile to play its sound. The four starter tiles play a dog bark, cat meow, duck quack, and car horn. Audio passes through a gain cap and soft limiter.
+Tap a tile to play its sound. The four starter tiles play a dog bark, cat meow, duck quack, and car horn. All defaults play for four seconds, with short calls repeated at their original pitch. Defaults and custom recordings fade out over their final half-second, bounded to the final half of very short clips. Custom recordings retain their saved length. Audio passes through a gain cap and soft limiter.
 
 ## Choose and create buttons
 
