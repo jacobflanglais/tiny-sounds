@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#f6f2e9">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="description" content="A little soundboard for little hands. Your photos, your voices, all on this device.">
+  <title>Tiny Sounds</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="./styles.css">
+  <script src="./demo-sounds.js" defer></script>
+  <script src="./app.js" defer></script>
+</head>
+<body>
+  <main id="play" aria-label="Soundboard"><div id="grid" class="sound-grid"></div></main>
+  <button id="gear" aria-label="Hold for 3 seconds to open parent controls" title="Hold for 3 seconds for parents"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m9 3-.7 2.4-2.4 1-.0 0L3.6 6l-1.4 2.4L4 10.2v2.7l-1.8 1.8 1.4 2.4 2.4-.4 2.3 1L9 20h3l.8-2.3 2.3-1 2.4.4 1.4-2.4-1.8-1.8v-2.7l1.8-1.8L17.5 6l-2.4.4-2.3-1L12 3Z" transform="translate(1 0)"/><circle cx="11.5" cy="11.5" r="3"/></svg></button>
+  <div id="flash" aria-hidden="true" hidden></div>
+  <p id="notice" class="notice" role="status" hidden></p>
+
+  <section id="parents" class="parent-screen" aria-label="Parent controls" hidden>
+    <div class="parent-wrap">
+      <header class="parent-header"><a class="wordmark" tabindex="-1" aria-label="Tiny Sounds"><span class="logo-mark">✳</span> tiny sounds<span class="wordmark-dot">.</span></a><button id="back" class="button dark">Back to play <span aria-hidden="true">↗</span></button></header>
+      <div class="parent-intro"><div><p class="eyebrow">A LITTLE SPACE FOR GROWN-UPS</p><h1>Familiar faces.<br>Favorite sounds.</h1><p class="intro-copy">Make their little world sound like home.</p></div><div class="intro-doodle" aria-hidden="true">✺<span>made for<br>little hands</span></div></div>
+      <div class="collection-heading"><div><h2>Your soundboard <span id="count"></span></h2><p>Drag to rearrange. Tap a card to make it yours.</p></div><button id="add" class="button dark"><span aria-hidden="true">＋</span> Add a sound</button></div>
+      <div id="edit-list" class="edit-list"></div>
+      <div class="parent-footer"><p><span class="privacy-dot"></span> Only on this device. Only for your family.</p><p id="offline-status" role="status">Preparing offline play…</p></div>
+      <p class="parent-tip">Little tip: hold the gear for 3 seconds to come back here.</p>
+    </div>
+  </section>
+
+  <dialog id="editor" aria-labelledby="editor-title">
+    <form id="editor-form">
+      <div class="dialog-heading"><div><p class="eyebrow">MAKE A LITTLE MEMORY</p><h2 id="editor-title">Add a sound</h2></div><button type="button" class="icon-button close-editor" aria-label="Cancel editing">×</button></div>
+      <label class="field-label" for="name">Give it a name</label><input id="name" maxlength="32" placeholder="Grandma, woof, the big red bus…" required autocomplete="off">
+      <div class="step-label"><span>1</span><h3>A familiar face</h3></div>
+      <div class="photo-picker"><div id="photo-preview" aria-hidden="true">☺</div><div><button type="button" id="pick-photo" class="button light">Choose a photo</button><button type="button" id="take-photo" class="text-button">Take a photo</button><p>Photos stay right here on this device.</p></div></div>
+      <input id="photo-file" type="file" accept="image/*" hidden><input id="camera-file" type="file" accept="image/*" capture="environment" hidden>
+      <div class="step-label"><span>2</span><h3>A sound they know</h3></div>
+      <div class="record-area"><button type="button" id="record" class="button record-button"><span class="record-dot" aria-hidden="true"></span><span id="record-label">Record sound</span></button><span id="record-time">Up to 15 seconds</span><button type="button" id="preview" aria-label="Preview sound" class="text-button" hidden>▷ Preview sound</button></div>
+      <p id="record-help" class="helper">A woof, a hello, a little giggle. Make it yours.</p>
+      <p id="editor-error" class="form-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" class="button light close-editor">Cancel</button><button id="save" class="button dark" type="submit">Save button <span aria-hidden="true">↗</span></button></div>
+    </form>
+  </dialog>
+  <dialog id="delete-dialog" aria-labelledby="delete-title"><h2 id="delete-title">Remove this sound?</h2><p id="delete-description"></p><p class="helper">Its photo and recording will be removed from this device.</p><p id="delete-error" class="form-error" role="alert" hidden></p><div class="dialog-actions"><button id="keep" class="button light">Keep it</button><button id="confirm-delete" class="button danger">Delete button</button></div></dialog>
+</body>
+</html>
