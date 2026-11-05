@@ -6,11 +6,15 @@ A private offline soundboard for little hands, built with vanilla HTML, CSS, and
 
 Tap a tile to play its sound. The four starter tiles play a dog bark, cat meow, duck quack, and car horn. Audio passes through a gain cap and soft limiter.
 
-## Add your own buttons
+## Choose and create buttons
 
-Hold the bottom-right gear for three seconds. Choose **Add a sound**, enter a name, take or choose a photo, then record and save a sound. Recordings can be up to 15 seconds. Drag the dotted handles to reorder, or use the arrows. Tap a card to edit it. The board holds up to 12 sounds.
+Hold the bottom-right gear for three seconds. **Sound library** contains 25 bundled sounds. Preview one, then choose **Add to play**. At 12 selected buttons, choose one to swap out; both remain saved.
 
-Photos and recordings stay in IndexedDB on the device where you add them. When you sign in, your board syncs through private account storage. Clearing browser storage can remove them.
+**Your recordings** holds up to 25 custom sounds. Choose **Add a sound**, enter a name, take or choose a photo, then record and save up to 15 seconds of audio. New recordings can stay saved while play is full. Personalizing a default creates a custom copy and keeps the original. Remove from play to save a sound for later; delete a custom sound only when you want to remove it permanently.
+
+The collection holds 50 sounds: 25 defaults and 25 custom recordings. The play screen shows at most 12. Drag active cards' dotted handles to reorder, or use the arrows.
+
+Photos and recordings persist offline in IndexedDB. Sign in to privately sync the collection and play selections across devices. Offline changes upload when connected. Clearing browser storage can remove local copies.
 
 ## Install on a phone
 

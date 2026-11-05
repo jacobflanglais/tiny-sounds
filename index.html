@@ -13,6 +13,7 @@
   <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
   <link rel="stylesheet" href="./styles.css">
   <script src="./demo-sounds.js" defer></script>
+  <script src="./catalog.js" defer></script>
   <script src="./vendor/supabase.js" defer></script>
   <script src="./sync-config.js" defer></script>
   <script src="./sync.js" defer></script>
@@ -28,8 +29,19 @@
     <div class="parent-wrap">
       <header class="parent-header"><a class="wordmark" tabindex="-1" aria-label="Tiny Sounds"><span class="logo-mark">✳</span> tiny sounds<span class="wordmark-dot">.</span></a><button id="back" class="button dark">Back to play <span aria-hidden="true">↗</span></button></header>
       <div class="parent-intro"><div><p class="eyebrow">A LITTLE SPACE FOR GROWN-UPS</p><h1>Familiar faces.<br>Favorite sounds.</h1><p class="intro-copy">Make their little world sound like home.</p></div><div class="intro-doodle" aria-hidden="true">✺<span>made for<br>little hands</span></div></div>
-      <div class="collection-heading"><div><h2>Your soundboard <span id="count"></span></h2><p>Drag to rearrange. Tap a card to make it yours.</p></div><button id="add" class="button dark"><span aria-hidden="true">＋</span> Add a sound</button></div>
-      <div id="edit-list" class="edit-list"></div>
+      <div class="settings-controls"><div class="collection-heading"><div><h2><span id="settings-heading">On the play screen</span> <span id="count"></span></h2><p id="collection-helper">Keep 12 favorites on play. Swap them whenever you like.</p></div><button id="add" class="button dark"><span aria-hidden="true">＋</span> Add a sound</button></div>
+      <div class="settings-tabs" role="tablist" aria-label="Soundboard settings">
+        <button id="tab-play" role="tab" aria-label="Play screen" aria-selected="true" aria-controls="panel-play" tabindex="0">Play screen <span id="active-tab-count" aria-hidden="true">4</span></button>
+        <button id="tab-library" role="tab" aria-label="Sound library" aria-selected="false" aria-controls="panel-library" tabindex="-1">Sound library <span aria-hidden="true">25</span></button>
+        <button id="tab-custom" role="tab" aria-label="Your recordings" aria-selected="false" aria-controls="panel-custom" tabindex="-1">Your recordings <span id="custom-tab-count" aria-hidden="true">0</span></button>
+      </div>
+      </div>
+      <section id="panel-play" role="tabpanel" aria-labelledby="tab-play"><div id="edit-list" class="edit-list"></div></section>
+      <section id="panel-library" role="tabpanel" aria-labelledby="tab-library" hidden>
+        <div class="library-tools"><label class="sr-only" for="library-search">Find a library sound</label><input id="library-search" type="search" placeholder="Find a familiar sound…" autocomplete="off"><label class="sr-only" for="library-category">Library category</label><select id="library-category"><option value="All">All sounds</option><option>Animals</option><option>Things</option><option>Music</option><option>Nature</option></select></div>
+        <p id="library-preview-status" class="helper" role="status">Preview a sound, then add it to play.</p><div id="library-list" class="saved-list"></div>
+      </section>
+      <section id="panel-custom" role="tabpanel" aria-labelledby="tab-custom" hidden><p class="helper">Your photos. Your voices. Keep up to 25, and choose which ones are on play.</p><div id="custom-list" class="saved-list"></div></section>
       <section class="sync-panel" aria-labelledby="sync-title">
         <div class="sync-heading"><div><p class="eyebrow">THE SAME LITTLE WORLD, EVERYWHERE</p><h2 id="sync-title">Your family, in sync.</h2><p id="sync-status" role="status">Sign in to carry your buttons between devices.</p></div><span id="sync-badge" class="sync-badge">On this device</span></div>
         <form id="sync-login" class="sync-login">
@@ -59,10 +71,12 @@
       <div class="step-label"><span>2</span><h3>A sound they know</h3></div>
       <div class="record-area"><button type="button" id="record" class="button record-button"><span class="record-dot" aria-hidden="true"></span><span id="record-label">Record sound</span></button><span id="record-time">Up to 15 seconds</span><button type="button" id="preview" aria-label="Preview sound" class="text-button" hidden>▷ Preview sound</button></div>
       <p id="record-help" class="helper">A woof, a hello, a little giggle. Make it yours.</p>
+      <label class="play-checkbox"><input id="editor-active" type="checkbox"> Show on the play screen</label><p id="editor-play-help" class="helper"></p>
       <p id="editor-error" class="form-error" role="alert" hidden></p>
       <div class="dialog-actions"><button type="button" class="button light close-editor">Cancel</button><button id="save" class="button dark" type="submit">Save button <span aria-hidden="true">↗</span></button></div>
     </form>
   </dialog>
+  <dialog id="swap-dialog" aria-labelledby="swap-title"><div class="dialog-heading"><div><p class="eyebrow">A LITTLE CHANGE OF SCENE</p><h2 id="swap-title">Make room for a new favorite</h2></div><button id="cancel-swap" class="icon-button" aria-label="Cancel swap">×</button></div><p id="swap-description" class="helper"></p><div id="swap-options" class="swap-options"></div><p id="swap-error" class="form-error" role="alert" hidden></p></dialog>
   <dialog id="delete-dialog" aria-labelledby="delete-title"><h2 id="delete-title">Remove this sound?</h2><p id="delete-description"></p><p class="helper">It will be removed from this board and your synced devices.</p><p id="delete-error" class="form-error" role="alert" hidden></p><div class="dialog-actions"><button id="keep" class="button light">Keep it</button><button id="confirm-delete" class="button danger">Delete button</button></div></dialog>
 </body>
 </html>

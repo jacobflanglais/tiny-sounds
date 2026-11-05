@@ -41,12 +41,16 @@ window.TinySoundsSync = (() => {
     if(err)throw err;return data;
   }
   function validateManifest(items,userId) {
-    if(!Array.isArray(items)||items.length>12)throw fail('The account board is not a supported Tiny Sounds board.');
+    if(!Array.isArray(items)||items.length>50)throw fail('The account board is not a supported Tiny Sounds board.');
     const ids=new Set();
+    TinyLibrary.assertLimits(items);
     return items.map(item=>{
       if(typeof item.id!=='string'||!/^[0-9a-f-]{36}$/i.test(item.id)||ids.has(item.id)||typeof item.name!=='string'||!item.name.trim()||item.name.length>32||!/^#[0-9a-f]{6}$/i.test(item.color)||typeof item.emoji!=='string'||item.emoji.length>16)throw fail('An account button could not be read. Your local board is unchanged.');
       ids.add(item.id);
-      for(const file of [item.audio,item.photo].filter(Boolean)){
+      if(item.active!==undefined&&typeof item.active!=='boolean')throw fail('An account play selection could not be read.');
+      if(item.kind!==undefined&&!['library','custom'].includes(item.kind))throw fail('An account sound type could not be read.');
+      if(item.audio?.builtin && (item.kind!=='library'||item.catalogKey!==item.audio.builtin||!TinyLibrary.byKey.has(item.catalogKey)||item.photo))throw fail('Update this app to use the account sound library.');
+      for(const file of [item.audio,item.photo].filter(file=>file&&!file.builtin)){
         if(typeof file.path!=='string'||!new RegExp(`^${userId}/[0-9a-f]{64}\\.bin$`).test(file.path)||typeof file.type!=='string'||!/^(audio\/[a-z0-9.+-]+|image\/jpeg)(;.*)?$/i.test(file.type))throw fail('An account recording or photo could not be read.');
       }
       if(!item.audio)throw fail('An account button is missing its recording.');
@@ -56,11 +60,11 @@ window.TinySoundsSync = (() => {
   async function decodeCloud(remote,local) {
     const userId=session.user.id;
     const items=validateManifest(remote.items,userId), cache=new Map();
-    for(const item of local.items)for(const blob of [item.audio,item.photo].filter(Boolean)){
+    for(const item of local.items.filter(item=>!TinyLibrary.isLibrary(item)))for(const blob of [item.audio,item.photo].filter(Boolean)){
       if(blob instanceof Blob)cache.set(await filePath(blob,userId),blob);
     }
     async function download(info){
-      if(!info)return null;if(cache.has(info.path))return cache.get(info.path);
+      if(!info)return null;if(info.builtin)return TinyLibrary.audio(info.builtin);if(cache.has(info.path))return cache.get(info.path);
       const {data,error:err}=await api.storage.from(BUCKET).download(info.path);if(err)throw err;
       if(data.size>5242880)throw fail('A synced file exceeds the supported size.');
       const blob=new Blob([data],{type:info.type});
@@ -69,7 +73,7 @@ window.TinySoundsSync = (() => {
     }
     const result=[];
     for(const item of items)result.push({...item,audio:await download(item.audio),photo:await download(item.photo)});
-    return result;
+    return TinyLibrary.normalize(result);
   }
   async function filePath(blob,userId) {
     const digest=await crypto.subtle.digest('SHA-256',await blob.arrayBuffer());
@@ -89,9 +93,11 @@ window.TinySoundsSync = (() => {
       }
       return {path,type};
     }
+    TinyLibrary.assertLimits(items);
     for(const item of items){
-      const audio=await upload(item.audio),photo=item.photo?await upload(item.photo):null;
-      result.push({id:item.id,name:item.name,emoji:item.emoji||'☺',color:item.color,demo:Boolean(item.demo),demoKey:item.demoKey||null,demoVersion:item.demoVersion||null,audio,photo});
+      const library=TinyLibrary.isLibrary(item);
+      const audio=library?{builtin:item.catalogKey,version:TinyLibrary.byKey.get(item.catalogKey).version,type:'audio/mpeg'}:await upload(item.audio),photo=item.photo?await upload(item.photo):null;
+      result.push({id:item.id,name:item.name,emoji:item.emoji||'☺',color:item.color,demo:Boolean(item.demo),demoKey:item.demoKey||null,demoVersion:item.demoVersion||null,kind:library?'library':'custom',catalogKey:library?item.catalogKey:null,active:item.active!==false,audio,photo});
     }
     return result;
   }
@@ -101,10 +107,10 @@ window.TinySoundsSync = (() => {
     if(retired.length)await api.storage.from(BUCKET).remove(retired);
   }
   async function takeCloud(remote,snap,backup,gen,userId) {
-    const items=remote?await decodeCloud(remote,snap):[];
+    const items=remote?await decodeCloud(remote,snap):TinyLibrary.normalize([]);
     if(!snapshotStill(snap,gen,userId))throw fail('This device changed while syncing.','LOCAL_CHANGED');
-    await adapter.replace(items,{owner:userId,remoteRevision:remote?.revision||0,dirty:false},snap.revision,backup?snap.items:null);
-    conflict=null;error('');message('Up to date. Your buttons are available on your signed-in devices.');
+    await adapter.replace(items,{owner:userId,remoteRevision:remote?.revision||0,dirty:!remote},snap.revision,backup?snap.items:null);
+    conflict=null;error('');message(remote?'Up to date. Your buttons are available on your signed-in devices.':'Empty account board selected. Syncing your choice…');
   }
   async function pruneOrphans(remoteItems,userId) {
     const referenced=mediaPaths(remoteItems || []), files=[];
@@ -162,7 +168,7 @@ window.TinySoundsSync = (() => {
       if(choice==='cloud'){await takeCloud(remote,snap,true,gen,userId);}
       else if(choice==='local'){await pushCloud(remote,snap,true,gen,userId);}
       else if(!linked){
-        const starters=!snap.meta.owner&&!snap.meta.dirty&&snap.items.length===4&&snap.items.every((item,index)=>item.demo&&!item.photo&&item.name===['Puppy','Kitty','Duck','Car'][index]&&item.emoji===['🐶','🐱','🦆','🚗'][index]);
+        const starters=!snap.meta.owner&&!snap.meta.dirty&&TinyLibrary.isStarter(snap.items);
         if(remote && starters)await takeCloud(remote,snap,true,gen,userId);
         else if(!remote && !snap.meta.owner)await pushCloud(remote,snap,false,gen,userId);
         else ask(remote,snap,userId);

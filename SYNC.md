@@ -4,7 +4,7 @@ Tiny Sounds shares the existing Quorum Supabase project. Tiny Sounds has its own
 
 ## Parent flow
 
-Hold the gear for three seconds and sign in in the sync section. Use the same account on each device. Existing Quorum accounts can sign in here. Photos, recordings, names, and ordering sync together. Anonymous local play remains available.
+Hold the gear for three seconds and sign in in the sync section. Use the same account on each device. Existing Quorum accounts can sign in here. Photos, recordings, names, ordering, and the active play selection sync together. Anonymous local play remains available.
 
 The local IndexedDB board remains the source for playback. Changes save locally first, then upload in the background. Offline edits queue until the connection returns. The app checks for remote changes on sign-in, reconnect, return to the app, entry to parent controls, and about every 30 seconds while signed in. A new starter-only device adopts the account board automatically. A device with personal content asks before replacing anything.
 
@@ -22,12 +22,12 @@ Authentication uses Supabase Auth with PKCE for Google redirects, email/password
 
 - `user_id uuid`: authenticated owner, primary key.
 - `revision bigint`: monotonically increasing cloud revision.
-- `items jsonb`: ordered array of at most 12 button manifests, at most 128 KiB total.
+- `items jsonb`: ordered array of at most 50 sound manifests (25 library and 25 custom, with at most 12 active), at most 128 KiB total.
 - `updated_at timestamptz`: last cloud write.
 
-Each manifest item has `id`, `name`, `emoji`, `color`, `demo`, optional `demoKey` and `demoVersion`, `audio`, and nullable `photo`. Media entries have `path` and MIME `type`. Objects are immutable, addressed as `<owner UUID>/<SHA-256>.bin`. The path hash is verified after downloads. Actual blobs live in the private Storage bucket and IndexedDB; manifests contain no encoded photos or audio.
+Each manifest item has `id`, `name`, `emoji`, `color`, `demo`, `kind`, `catalogKey`, `active`, optional `demoKey` and `demoVersion`, `audio`, and nullable `photo`. Custom media entries have `path` and MIME `type`. Library audio uses `{builtin: catalogKey, version, type: "audio/mpeg"}` with a validated catalog key and no photo. Library references reconstruct the bundled recording locally and consume no private media quota. Legacy manifests remain supported and normalize into the collection model. Objects are immutable, addressed as `<owner UUID>/<SHA-256>.bin`. The path hash is verified after downloads. Actual blobs live in the private Storage bucket and IndexedDB; manifests contain no encoded photos or audio.
 
-The client reads its manifest through the Supabase Data API. `tiny_sounds_save_board(p_expected_revision bigint,p_items jsonb)` performs an owner-scoped compare-and-set. A stale revision returns HTTP 409 (`PT409`). The RPC verifies each referenced file exists and belongs to the caller. It runs as `SECURITY INVOKER` with an empty search path.
+The client reads its manifest through the Supabase Data API. `tiny_sounds_save_board(p_expected_revision bigint,p_items jsonb)` performs an owner-scoped compare-and-set. A stale revision returns HTTP 409 (`PT409`). The RPC verifies each referenced file exists and belongs to the caller, validates known library references, and enforces collection and active-selection limits. It runs as `SECURITY INVOKER` with an empty search path.
 
 Local IndexedDB `state` keys:
 
@@ -42,7 +42,7 @@ RLS limits table rows and Storage paths to `auth.uid()`. Anonymous callers have 
 
 ## Deployment
 
-Runtime files now also include `sync-config.js`, `sync.js`, and `vendor/`. Their paths are in the service worker precache. Auth redirects must allow `https://jacobflanglais.github.io/tiny-sounds/` (and the exact localhost origin used during development). Add these redirects to the existing Auth configuration without replacing Quorum's URLs.
+Runtime files include `catalog.js`, `demo-sounds.js`, `sync-config.js`, `sync.js`, and `vendor/`. Their paths are in the service worker precache. Auth redirects must allow `https://jacobflanglais.github.io/tiny-sounds/` (and the exact localhost origin used during development). Add these redirects to the existing Auth configuration without replacing Quorum's URLs.
 
 ## Verification
 

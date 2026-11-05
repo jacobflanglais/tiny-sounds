@@ -1,8 +1,8 @@
 'use strict';
 const $ = (selector) => document.querySelector(selector);
 const COLORS = ['#e1e9c9', '#edd9ca', '#f1e5b8', '#cbdde4', '#e2d6e8', '#d6e5dc'];
-// A small board keeps every tile finger-sized without a scrolling play screen.
-const MAX_BUTTONS = 12;
+// Keep the play surface small; the parent collection holds 25 defaults + 25 custom sounds.
+const MAX_BUTTONS = 12, MAX_CUSTOM = 25;
 const DB_NAME = 'tiny-sounds';
 let db, boardRevision = 0, board = [], urls = [], initialized = false, storageOK = false;
 let audioContext, output, currentSource, playSequence = 0;
@@ -42,6 +42,7 @@ function readBoard() {
   });
 }
 function writeBoard(next, options={}) {
+  TinyLibrary.assertLimits(next);
   const expected=options.expectedRevision ?? boardRevision;
   return new Promise((resolve,reject)=>{
     if(!db||!storageOK)return reject(new Error('Device storage is unavailable. Enable site storage, then reopen the app.'));
@@ -69,13 +70,13 @@ function storedValue(key, value) {
 }
 const syncAdapter = {
   snapshot:()=>({items:board,revision:boardRevision,meta:{...syncMeta}}),
-  busy:()=>saving||busyBoard||$('#editor').open||$('#delete-dialog').open,
+  busy:()=>saving||busyBoard||$('#editor').open||$('#delete-dialog').open||$('#swap-dialog').open,
   backup:items=>storedValue('board-backup',items),
   hasBackup:async()=>Boolean(await storedValue('board-backup')),
   async replace(items,meta,expected,backup){
     if(this.busy())throw Object.assign(new Error('Finish editing before downloading account changes.'),{code:'LOCAL_BUSY'});
     await writeBoard(items,{meta,expectedRevision:expected,backup});
-    board=items;buffers.clear();stopSound();render();Promise.allSettled(board.map(decodeSound));
+    board=items;buffers.clear();stopSound();render();Promise.allSettled(board.filter(item=>item.active!==false).map(decodeSound));
   },
   async checkCurrent(expected){
     return new Promise((resolve,reject)=>{
@@ -103,34 +104,19 @@ const syncAdapter = {
   },
   async restore(){
     if(this.busy())throw new Error('Finish editing before restoring a previous board.');
-    const previous=await storedValue('board-backup');if(!previous)return;
-    await writeBoard(previous,{backup:board});board=previous;buffers.clear();stopSound();render();Promise.allSettled(board.map(decodeSound));
+    const backup=await storedValue('board-backup');if(!backup)return;const previous=TinyLibrary.normalize(backup);
+    await writeBoard(previous,{backup:board});board=previous;buffers.clear();stopSound();render();Promise.allSettled(board.filter(item=>item.active!==false).map(decodeSound));
   }
 };
 function storageMessage(error) {
   return error?.name === 'QuotaExceededError' ? 'This device is out of storage. Free some space and try again. Your saved board is unchanged.' : (error?.message || 'Could not save. Your saved board is unchanged. Please try again.');
 }
 
-// Encoded recordings are bundled in demo-sounds.js and never fetched externally.
-const DEMO_KEYS = {'🐶':'puppy','🐱':'kitty','🦆':'duck','🚗':'car'};
-const DEMO_VERSIONS = {puppy:2,kitty:3,duck:3,car:2};
-function demoAudio(key) {
-  return new Blob([Uint8Array.from(atob(DEMO_SOUNDS[key]), c => c.charCodeAt(0))], {type:'audio/mpeg'});
-}
-function defaultBoard() {
-  return ['Puppy','Kitty','Duck','Car'].map((name,i) => {
-    const emoji=['🐶','🐱','🦆','🚗'][i], demoKey=DEMO_KEYS[emoji];
-    return {id:crypto.randomUUID(),name,emoji,color:COLORS[i],photo:null,audio:demoAudio(demoKey),demo:true,demoKey,demoVersion:DEMO_VERSIONS[demoKey]};
-  });
-}
-function upgradeDemoSounds(items) {
-  return items.map(item => {
-    const key = DEMO_KEYS[item.emoji];
-    // Only old, recognizable emoji demos qualify. Personal photos/recordings are untouched.
-    if (!item.demo || item.photo || !key || item.demoVersion === DEMO_VERSIONS[key]) return item;
-    return {...item,audio:demoAudio(key),demoKey:key,demoVersion:DEMO_VERSIONS[key]};
-  });
-}
+const DEMO_KEYS = Object.fromEntries(TinyLibrary.definitions.map(item=>[item.emoji,item.key]));
+const DEMO_VERSIONS = Object.fromEntries(TinyLibrary.definitions.map(item=>[item.key,item.version]));
+const demoAudio=key=>TinyLibrary.audio(key);
+const defaultBoard=()=>TinyLibrary.starter();
+const upgradeDemoSounds=items=>TinyLibrary.normalize(items);
 function audioEngine() {
   if (audioContext) return audioContext;
   const Audio = window.AudioContext || window.webkitAudioContext;
@@ -167,6 +153,8 @@ function stopSound() {
 }
 async function playSound(item) {
   try {
+    const keep=new Set(board.filter(item=>item.active!==false).map(item=>item.id));keep.add(item.id);keep.add('preview');
+    for(const id of buffers.keys())if(!keep.has(id))buffers.delete(id);
     const context=audioEngine();
     // Resume inside the user gesture, before any decoding awaits.
     const resume=context.resume(); stopSound(); const sequence=playSequence;
@@ -186,48 +174,109 @@ function flash(item, url) {
   const el=$('#flash'); el.replaceChildren(visual(item,url)); el.style.setProperty('--tile-color',item.color);
   el.hidden=false; clearTimeout(flashTimer); flashTimer=setTimeout(()=>{el.hidden=true;el.replaceChildren();},400);
 }
-function render() {
-  urls.forEach(url=>URL.revokeObjectURL(url)); urls=[];
-  const grid=$('#grid'), list=$('#edit-list'); grid.replaceChildren(); list.replaceChildren();
-  grid.style.setProperty('--rows',Math.max(1,Math.ceil(board.length/2)));
-  board.forEach((item,index)=>{
-    const url=item.photo?URL.createObjectURL(item.photo):null; if(url)urls.push(url);
-    const tile=document.createElement('button');tile.type='button';tile.className='sound-tile'+(url?' has-photo':'');
-    tile.style.setProperty('--tile-color',item.color); tile.setAttribute('aria-label',`Play ${item.name}`);
-    tile.append(visual(item,url)); const name=document.createElement('span');name.className='tile-name';name.textContent=item.name;tile.append(name);
-    tile.addEventListener('pointerdown',event=>{if(event.button!==0 || event.isPrimary===false)return;event.preventDefault();flash(item,url);playSound(item);});
-    tile.addEventListener('click',event=>{if(event.detail===0){flash(item,url);playSound(item);}});
-    grid.append(tile);
+let settingsTab='play', swapTarget=null;
+const activeItems=()=>board.filter(item=>item.active!==false);
+const customItems=()=>board.filter(item=>!TinyLibrary.isLibrary(item));
+const renderPhotos=new Map();
+function photoFor(item){
+  if(!item.photo)return null;
+  if(!renderPhotos.has(item.id)){const url=URL.createObjectURL(item.photo);renderPhotos.set(item.id,url);urls.push(url);}
+  return renderPhotos.get(item.id);
+}
+function showSettingsTab(name,focus=false){
+  settingsTab=name;
+  for(const key of ['play','library','custom']){
+    const selected=key===name;$('#tab-'+key).setAttribute('aria-selected',String(selected));$('#tab-'+key).tabIndex=selected?0:-1;$('#panel-'+key).hidden=!selected;
+  }
+  const counts=TinyLibrary.counts(board);
+  $('#settings-heading').textContent={play:'On the play screen',library:'The sound library',custom:'Your recordings'}[name];
+  $('#count').textContent=name==='play'?`${counts.active} / 12`:name==='library'?'25 included':`${counts.custom} / 25`;
+  $('#collection-helper').textContent={play:'Keep 12 favorites on play. Swap them whenever you like.',library:'25 familiar sounds, ready to play. All available offline.',custom:'Save your family favorites here, even when the play screen is full.'}[name];
+  if(focus)$('#tab-'+name).focus();
+}
+function requestDelete(item){
+  if(TinyLibrary.isLibrary(item))return;
+  deleteId=item.id;$('#delete-description').textContent=`Delete “${item.name}” from your collection and synced devices?`;
+  $('#delete-error').hidden=true;$('#delete-dialog').showModal();$('#keep').focus();
+}
+function render(){
+  urls.forEach(url=>URL.revokeObjectURL(url));urls=[];renderPhotos.clear();
+  const grid=$('#grid'),list=$('#edit-list'),active=activeItems();grid.replaceChildren();list.replaceChildren();
+  grid.style.setProperty('--rows',Math.max(1,Math.ceil(active.length/2)));
+  active.forEach((item,index)=>{
+    const url=photoFor(item),tile=document.createElement('button');tile.type='button';tile.className='sound-tile'+(url?' has-photo':'');
+    tile.style.setProperty('--tile-color',item.color);tile.setAttribute('aria-label',`Play ${item.name}`);tile.append(visual(item,url));
+    const name=document.createElement('span');name.className='tile-name';name.textContent=item.name;tile.append(name);
+    tile.addEventListener('pointerdown',event=>{if(event.button!==0||event.isPrimary===false)return;event.preventDefault();flash(item,url);playSound(item);});
+    tile.addEventListener('click',event=>{if(event.detail===0){flash(item,url);playSound(item);}});grid.append(tile);
     const card=document.createElement('article');card.className='edit-card';card.dataset.id=item.id;card.style.setProperty('--tile-color',item.color);
     const edit=document.createElement('button');edit.type='button';edit.className='card-edit';edit.setAttribute('aria-label',`Edit ${item.name}`);
     const thumb=document.createElement('span');thumb.className='card-thumb';thumb.append(visual(item,url));
     const title=document.createElement('span');title.className='card-title';title.textContent=item.name;
-    const detail=document.createElement('span');detail.className='card-detail';detail.textContent=item.demo?'A little demo sound':'Made by your family';
-    edit.append(thumb,title,detail);edit.onclick=()=>openEditor(item);card.append(edit);
+    const detail=document.createElement('span');detail.className='card-detail';detail.textContent=TinyLibrary.isLibrary(item)?'From the sound library':'Made by your family';
+    edit.append(thumb,title,detail);edit.onclick=()=>openEditor(item);edit.disabled=TinyLibrary.isLibrary(item)&&customItems().length>=MAX_CUSTOM;edit.title=edit.disabled?'Remove a custom recording to make room for a personalized copy.':'';card.append(edit);
     const controls=document.createElement('div');controls.className='card-controls';
-    const handle=iconButton('⠿',`Drag ${item.name} to reorder`);handle.classList.add('drag-handle');
-    handle.addEventListener('pointerdown',event=>startDrag(event,item.id,card));
-    const move=document.createElement('div');move.className='move-controls';
-    const up=iconButton('←',`Move ${item.name} up`),down=iconButton('→',`Move ${item.name} down`);
-    up.disabled=index===0;down.disabled=index===board.length-1;
-    up.onclick=()=>reorder(item.id,index-1);down.onclick=()=>reorder(item.id,index+1);move.append(up,down);
-    const remove=iconButton('×',`Delete ${item.name}`);remove.onclick=()=>{
-      deleteId=item.id;$('#delete-description').textContent=`Remove “${item.name}” from your soundboard?`;
-      $('#delete-error').hidden=true;$('#delete-dialog').showModal();$('#keep').focus();
-    };
-    controls.append(handle,move,remove);card.append(controls);list.append(card);
+    const handle=iconButton('⠿',`Drag ${item.name} to reorder`);handle.classList.add('drag-handle');handle.addEventListener('pointerdown',event=>startDrag(event,item.id,card));
+    const move=document.createElement('div');move.className='move-controls';const up=iconButton('←',`Move ${item.name} up`),down=iconButton('→',`Move ${item.name} down`);
+    up.disabled=index===0;down.disabled=index===active.length-1;up.onclick=()=>reorder(item.id,index-1);down.onclick=()=>reorder(item.id,index+1);move.append(up,down);
+    const remove=iconButton('−',`Remove ${item.name} from play`);remove.onclick=()=>togglePlay(item.id);controls.append(handle,move,remove);card.append(controls);list.append(card);
   });
-  if(!board.length){const empty=document.createElement('p');empty.className='empty-play';empty.innerHTML='<span aria-hidden="true">✳</span>Hold the gear to add your first sound.';grid.append(empty);list.textContent='A little quiet here. Add your first familiar face.';}
-  $('#count').textContent=board.length;
-  $('#add').disabled=!storageOK||board.length>=MAX_BUTTONS;
-  $('#add').title=board.length>=MAX_BUTTONS?'12 sounds keeps every button big enough for little hands.':'';
+  if(!active.length){const empty=document.createElement('p');empty.className='empty-play';empty.innerHTML='<span aria-hidden="true">✳</span>Hold the gear to choose sounds for play.';grid.append(empty);list.textContent='Choose favorites from Sound library or Your recordings.';}
+  $('#active-tab-count').textContent=active.length;$('#custom-tab-count').textContent=customItems().length;
+  $('#add').disabled=!storageOK||customItems().length>=MAX_CUSTOM;$('#add').title=customItems().length>=MAX_CUSTOM?'Your 25 custom sound spaces are full. Remove a recording to add another.':'';
+  renderSavedCollections();showSettingsTab(settingsTab);
+  const keep=new Set(active.map(item=>item.id));keep.add('preview');for(const id of buffers.keys())if(!keep.has(id))buffers.delete(id);
 }
-function iconButton(text,label) {const el=document.createElement('button');el.type='button';el.className='icon-button';el.textContent=text;el.setAttribute('aria-label',label);return el;}
-async function reorder(id,target) {
-  if(busyBoard)return;const next=[...board],from=next.findIndex(item=>item.id===id);
-  if(from<0||from===target||target<0||target>=next.length)return;
-  next.splice(target,0,next.splice(from,1)[0]);busyBoard=true;
-  try{await writeBoard(next);board=next;render();}catch(error){notify(storageMessage(error));}finally{busyBoard=false;}
+function savedCard(item,library){
+  const card=document.createElement('article');card.className='saved-card';card.dataset.id=item.id;card.style.setProperty('--tile-color',item.color);
+  const preview=document.createElement('button');preview.type='button';preview.className='saved-preview';preview.setAttribute('aria-label',`Preview ${item.name}`);const image=visual(item,photoFor(item));if(image.tagName==='IMG')image.loading='lazy';preview.append(image);preview.onclick=()=>{$('#library-preview-status').textContent=`Previewing ${item.name}`;playSound(item);};
+  const title=document.createElement('h3');title.className='saved-name';title.textContent=item.name;
+  const subtitle=document.createElement('p');subtitle.className='saved-detail';subtitle.textContent=item.active!==false?'On the play screen':library?TinyLibrary.byKey.get(item.catalogKey).category:'Saved in your collection';
+  const toggle=document.createElement('button');toggle.type='button';toggle.className='saved-toggle'+(item.active!==false?' selected':'');toggle.setAttribute('aria-label',`Use ${item.name} on play screen`);toggle.setAttribute('aria-pressed',String(item.active!==false));toggle.textContent=item.active!==false?'✓ On play':'+ Add to play';toggle.disabled=!storageOK;toggle.onclick=()=>togglePlay(item.id);
+  const actions=document.createElement('div');actions.className='saved-actions';
+  const edit=document.createElement('button');edit.type='button';edit.className='text-button';edit.textContent=library?'Make it yours':'Edit';edit.setAttribute('aria-label',`${library?'Customize':'Edit'} ${item.name}`);edit.onclick=()=>openEditor(item);edit.disabled=library&&customItems().length>=MAX_CUSTOM;edit.title=edit.disabled?'Remove a custom recording to make room for a personalized copy.':'';actions.append(edit);
+  if(!library){const remove=iconButton('×',`Delete ${item.name}`);remove.onclick=()=>requestDelete(item);actions.append(remove);}
+  card.append(preview,title,subtitle,toggle,actions);return card;
+}
+function renderSavedCollections(){
+  const list=$('#library-list'),custom=$('#custom-list');list.replaceChildren();custom.replaceChildren();
+  const query=$('#library-search').value.trim().toLowerCase(),category=$('#library-category').value;
+  for(const definition of TinyLibrary.definitions){
+    if(query&&!definition.name.toLowerCase().includes(query))continue;if(category!=='All'&&definition.category!==category)continue;
+    const item=board.find(item=>TinyLibrary.isLibrary(item)&&item.catalogKey===definition.key);if(item)list.append(savedCard(item,true));
+  }
+  if(!list.childElementCount)list.textContent='No familiar sounds found. Try another name or category.';
+  for(const item of customItems())custom.append(savedCard(item,false));
+  if(!custom.childElementCount)custom.textContent='Your family sounds will live here. Add a photo and a recording to get started.';
+}
+function iconButton(text,label){const el=document.createElement('button');el.type='button';el.className='icon-button';el.textContent=text;el.setAttribute('aria-label',label);return el;}
+async function commitCollection(next){
+  if(busyBoard||saving)return;busyBoard=true;
+  try{await writeBoard(next);board=next;render();Promise.allSettled(activeItems().map(decodeSound));return true;}
+  catch(error){notify(storageMessage(error));return false;}finally{busyBoard=false;}
+}
+async function reorder(id,target){
+  const active=activeItems(),from=active.findIndex(item=>item.id===id);if(from<0||from===target||target<0||target>=active.length)return;
+  active.splice(target,0,active.splice(from,1)[0]);let index=0;await commitCollection(board.map(item=>item.active!==false?active[index++]:item));
+}
+async function togglePlay(id){
+  if(busyBoard||saving)return;const item=board.find(item=>item.id===id);if(!item)return;
+  if(item.active!==false){await commitCollection(board.map(old=>old.id===id?{...old,active:false}:old));return;}
+  if(activeItems().length>=MAX_BUTTONS){openSwap(item);return;}
+  await commitCollection([...board.filter(old=>old.id!==id),{...item,active:true}]);
+}
+function openSwap(item){
+  swapTarget=item.id;$('#swap-title').textContent=`Make room for ${item.name}`;$('#swap-description').textContent='Choose a sound to swap out. It stays in your collection for another day.';$('#swap-error').hidden=true;
+  const options=$('#swap-options');options.replaceChildren();
+  for(const current of activeItems()){
+    const button=document.createElement('button');button.type='button';button.className='swap-option';button.style.setProperty('--tile-color',current.color);button.setAttribute('aria-label',`Replace ${current.name} with ${item.name}`);button.append(visual(current,photoFor(current)));const label=document.createElement('span');label.textContent=current.name;button.append(label);
+    button.onclick=async()=>{
+      if(busyBoard)return;const target=board.find(old=>old.id===swapTarget);if(!target)return;
+      const next=board.filter(old=>old.id!==target.id).map(old=>old.id===current.id?{...old,active:false}:old),index=next.findIndex(old=>old.id===current.id);next.splice(index,0,{...target,active:true});
+      if(await commitCollection(next)){$('#swap-dialog').close();swapTarget=null;notify(`${item.name} is on play. ${current.name} is saved in your collection.`);}
+    };options.append(button);
+  }
+  $('#swap-dialog').showModal();
 }
 function startDrag(event,id,card) {
   if(event.button!==0 || busyBoard)return;
@@ -241,7 +290,7 @@ function startDrag(event,id,card) {
   const finish=e=>{
     handle.removeEventListener('pointermove',move);handle.removeEventListener('pointerup',finish);handle.removeEventListener('pointercancel',cancel);
     card.classList.remove('dragging');document.querySelectorAll('.drop-target').forEach(el=>el.classList.remove('drop-target'));
-    if(e.type==='pointerup'&&target&&target!==card)reorder(id,board.findIndex(item=>item.id===target.dataset.id));
+    if(e.type==='pointerup'&&target&&target!==card)reorder(id,activeItems().findIndex(item=>item.id===target.dataset.id));
   };
   const cancel=e=>finish(e);
   handle.addEventListener('pointermove',move);handle.addEventListener('pointerup',finish);handle.addEventListener('pointercancel',cancel);
@@ -268,18 +317,26 @@ $('#gear').addEventListener('keydown',e=>{if((e.key===' '||e.key==='Enter')&&!e.
 $('#gear').addEventListener('keyup',e=>{if(e.key===' '||e.key==='Enter')cancelHold();});
 $('#gear').addEventListener('contextmenu',e=>e.preventDefault());
 $('#back').onclick=()=>{$('#parents').hidden=true;$('#gear').hidden=false;$('#play').inert=false;stopSound();$('#gear').focus();};
-$('#add').onclick=()=>openEditor();
+$('#add').onclick=()=>{showSettingsTab('custom');openEditor();};
+for(const [index,key] of ['play','library','custom'].entries()){
+  $('#tab-'+key).onclick=()=>showSettingsTab(key);
+  $('#tab-'+key).onkeydown=e=>{const keys=['play','library','custom'];let next;if(e.key==='ArrowRight')next=(index+1)%3;if(e.key==='ArrowLeft')next=(index+2)%3;if(e.key==='Home')next=0;if(e.key==='End')next=2;if(next!==undefined){e.preventDefault();showSettingsTab(keys[next],true);}};
+}
+$('#library-search').oninput=renderSavedCollections;$('#library-category').onchange=renderSavedCollections;
+$('#cancel-swap').onclick=()=>{if(!busyBoard)$('#swap-dialog').close();};$('#swap-dialog').addEventListener('cancel',e=>{if(busyBoard)e.preventDefault();});
 
 function updatePhotoPreview() {
   if(photoURL)URL.revokeObjectURL(photoURL);photoURL=draft.photo?URL.createObjectURL(draft.photo):null;
   $('#photo-preview').replaceChildren(visual(draft,photoURL));
 }
 function openEditor(item) {
-  editorSession++;draft=item?{...item}:{id:crypto.randomUUID(),name:'',emoji:'☺',color:COLORS[board.length%COLORS.length],photo:null,audio:null,demo:false};
+  editorSession++;draft=item?{...item}:{id:crypto.randomUUID(),name:'',emoji:'☺',color:COLORS[board.length%COLORS.length],photo:null,audio:null,demo:false,kind:'custom',catalogKey:null,active:activeItems().length<MAX_BUTTONS};
   $('#editor-title').textContent=item?'A little update':'Add a sound';$('#name').value=draft.name;
   $('#photo-file').value='';$('#camera-file').value='';$('#record-label').textContent='Record sound';$('#record-time').textContent='Up to 15 seconds';
   $('#record').classList.remove('recording');$('#record').disabled=false;$('#preview').hidden=!draft.audio;
   $('#record-help').textContent='A woof, a hello, a little giggle. Make it yours.';$('#save').disabled=false;
+  $('#editor-active').checked=draft.active!==false;$('#editor-active').disabled=activeItems().length>=MAX_BUTTONS&&draft.active===false;
+  $('#editor-play-help').textContent=$('#editor-active').disabled?'The play screen is full. Save it here, then choose a sound to swap out.':TinyLibrary.isLibrary(draft)?'Personalizing a library sound saves a custom copy. The original stays in the library.':'Saved sounds can be swapped onto play whenever you like.';
   editorError();updatePhotoPreview();$('#editor').showModal();
 }
 function closeEditor() {
@@ -355,9 +412,14 @@ $('#editor-form').onsubmit=async event=>{
   const name=$('#name').value.trim();if(!name){editorError('Give this button a name.');$('#name').focus();return;}
   if(!draft.photo&&!board.some(item=>item.id===draft.id)){editorError('Choose or take a photo first.');return;}
   if(!draft.audio){editorError('Record a sound first.');return;}
-  const item={...draft,name};const exists=board.some(el=>el.id===item.id);
-  if(!exists&&board.length>=MAX_BUTTONS){editorError('Your board is full. Remove a button before adding another.');return;}
-  const next=exists?board.map(el=>el.id===item.id?item:el):[...board,item];
+  const original=board.find(item=>item.id===draft.id),library=original&&TinyLibrary.isLibrary(original);
+  const personalized=library&&(name!==original.name||draft.photo!==original.photo||draft.audio!==original.audio);
+  const customNew=!original||personalized;
+  if(customNew&&customItems().length>=MAX_CUSTOM){editorError('Your 25 custom sound spaces are full. Delete a saved recording before adding another.');return;}
+  const active=$('#editor-active').checked;
+  const item={...draft,name,active,...(personalized?{id:crypto.randomUUID(),kind:'custom',catalogKey:null,demo:false}:{})};
+  const next=personalized?board.flatMap(old=>old.id===original.id?[{...old,active:false},item]:[old]):original?board.map(old=>old.id===item.id?item:old):[...board,item];
+  if(next.filter(item=>item.active!==false).length>MAX_BUTTONS){editorError('The play screen has 12 sounds. Save this one with Show on the play screen unchecked, then swap it in.');return;}
   saving=true;$('#save').disabled=true;
   try{
     await writeBoard(next);board=next;buffers.delete(item.id);await decodeSound(item).catch(()=>{});render();
@@ -391,7 +453,7 @@ async function setupOffline() {
   if(!('serviceWorker' in navigator)){status.textContent='Offline installation is unavailable in this browser.';return;}
   try{
     await navigator.serviceWorker.register('./sw.js');await navigator.serviceWorker.ready;
-    const update=()=>status.textContent=storageOK?(navigator.onLine?'Ready for offline play · up to 12 sounds':'Offline & ready to play'):'Device storage unavailable. Changes cannot be saved.';
+    const update=()=>status.textContent=storageOK?(navigator.onLine?'Ready for offline play · 12 on play, 50 in your collection':'Offline & ready to play'):'Device storage unavailable. Changes cannot be saved.';
     update();window.addEventListener('online',update);window.addEventListener('offline',update);
   }catch{status.textContent='Offline setup failed. Open on HTTPS or localhost, then reload.';}
 }
@@ -404,7 +466,7 @@ async function setupOffline() {
     }
   }catch(error){storageOK=false;if(!board.length)board=defaultBoard();notify('Device storage is unavailable. Demo play works, but changes cannot be saved.');}
   // Decode before showing the board, avoiding a decoding delay on the first tap.
-  await Promise.allSettled(board.map(decodeSound));initialized=true;render();setupOffline();
+  await Promise.allSettled(board.filter(item=>item.active!==false).map(decodeSound));initialized=true;render();setupOffline();
   if(storageOK)window.TinySoundsSync?.start(syncAdapter).catch(()=>{ $('#sync-status').textContent='Sync could not start. Your saved board still plays on this device.'; });
   else { $('#sync-status').textContent='Enable device storage to use private sync.';$('#sync-login').inert=true; }
 })();
